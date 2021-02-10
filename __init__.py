@@ -13,7 +13,7 @@ import pstats
 
 # info about add on
 bl_info = {
-	"name": "Fast64",
+	"name": "Fast64 + METAL Composer JSON",
 	"category": "Object",
 	"blender": (2, 82, 0),
 	}
@@ -29,6 +29,13 @@ enumExportType = [
 	('C', 'C', 'C'),
 	('Binary', 'Binary', 'Binary'),
 	('Insertable Binary', 'Insertable Binary', 'Insertable Binary')
+]
+
+enumExportTypeAnimation = [
+	('C', 'C', 'C'),
+	('Binary', 'Binary', 'Binary'),
+	('Insertable Binary', 'Insertable Binary', 'Insertable Binary'),
+	('METAL Composer JSON', 'METAL Composer JSON', 'METAL Composer JSON')
 ]
 
 enumRefreshVer = [
@@ -1459,13 +1466,13 @@ class SM64_ExportAnimMario(bpy.types.Operator):
 		romfileOutput = None
 		tempROM = None
 		try:
-			if context.mode != 'OBJECT':
-				raise PluginError("Operator can only be used in object mode.")
 			if len(context.selected_objects) == 0 or not \
 				isinstance(context.selected_objects[0].data, bpy.types.Armature):
 				raise PluginError("Armature not selected.")
 			if len(context.selected_objects) > 1 :
 				raise PluginError("Multiple objects selected, make sure to select only one.")
+			if context.mode != 'OBJECT':
+				bpy.ops.object.mode_set(mode = "OBJECT")
 			armatureObj = context.selected_objects[0]
 		except Exception as e:
 			raisePluginError(self, e)
@@ -1494,6 +1501,17 @@ class SM64_ExportAnimMario(bpy.types.Operator):
 					context.scene.loopAnimation)
 				self.report({'INFO'}, 'Success! Animation at ' +\
 					context.scene.animInsertableBinaryPath)
+			except Exception as e:
+				raisePluginError(self, e)
+				return {"CANCELLED"}
+		elif context.scene.animExportType == 'METAL Composer JSON':
+			try:
+				exportAnimationJSON(
+					bpy.path.abspath(context.scene.animJsonPath),
+					armatureObj, context.scene.loopAnimation,
+					context.scene.animJsonName, context.scene.animJsonAuthor)
+				self.report({'INFO'}, 'Success! MComp JSON Animation at ' +\
+					context.scene.animJsonPath)
 			except Exception as e:
 				raisePluginError(self, e)
 				return {"CANCELLED"}
@@ -1616,6 +1634,10 @@ class SM64_ExportAnimPanel(bpy.types.Panel):
 		elif context.scene.animExportType == 'Insertable Binary':
 			col.prop(context.scene, 'isDMAExport')
 			col.prop(context.scene, 'animInsertableBinaryPath')
+		elif context.scene.animExportType == 'METAL Composer JSON':
+			col.prop(context.scene, 'animJsonName')
+			col.prop(context.scene, 'animJsonAuthor')
+			col.prop(context.scene, 'animJsonPath')
 		else:
 			col.prop(context.scene, 'isDMAExport')
 			if context.scene.isDMAExport:
@@ -2216,13 +2238,15 @@ def register():
 	bpy.types.Scene.addr_0x28 = bpy.props.StringProperty(
 		name = '0x28 Command Address', default = '21CD08')
 	bpy.types.Scene.animExportType = bpy.props.EnumProperty(
-		items = enumExportType, name = 'Export', default = 'Binary')
+		items = enumExportTypeAnimation, name = 'Export', default = 'Binary')
 	bpy.types.Scene.animExportPath = bpy.props.StringProperty(
 		name = 'Directory', subtype = 'FILE_PATH')
 	bpy.types.Scene.animOverwriteDMAEntry = bpy.props.BoolProperty(
 		name = 'Overwrite DMA Entry')
 	bpy.types.Scene.animInsertableBinaryPath = bpy.props.StringProperty(
 		name = 'Filepath', subtype = 'FILE_PATH')
+	bpy.types.Scene.animJsonPath = bpy.props.StringProperty(
+		name = 'JSON Filepath', subtype = 'FILE_PATH')
 	bpy.types.Scene.animIsSegPtr = bpy.props.BoolProperty(
 		name = 'Is Segmented Address', default = False)
 	bpy.types.Scene.animIsAnimList = bpy.props.BoolProperty(
@@ -2233,6 +2257,10 @@ def register():
 		name = "Anim List Index", min = 0, max = 255)
 	bpy.types.Scene.animName = bpy.props.StringProperty(
 		name = 'Name', default = 'mario')
+	bpy.types.Scene.animJsonName = bpy.props.StringProperty(
+		name = 'Anim Name', default = 'METAL Composer Animation')
+	bpy.types.Scene.animJsonAuthor = bpy.props.StringProperty(
+		name = 'Anim Author', default = 'A very happy machinimist')
 	bpy.types.Scene.animGroupName = bpy.props.StringProperty(
 		name = 'Group Name', default = 'group0')
 	bpy.types.Scene.animWriteHeaders = bpy.props.BoolProperty(
@@ -2397,6 +2425,7 @@ def unregister():
 	del bpy.types.Scene.animExportPath
 	del bpy.types.Scene.animOverwriteDMAEntry
 	del bpy.types.Scene.animInsertableBinaryPath
+	del bpy.types.Scene.animJsonPath
 	del bpy.types.Scene.animIsSegPtr
 	del bpy.types.Scene.animIsAnimList
 	del bpy.types.Scene.animListIndexImport

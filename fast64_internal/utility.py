@@ -10,6 +10,7 @@ import math
 import traceback
 import re
 import os
+from .utility_anim import *
 
 class PluginError(Exception):
 	pass

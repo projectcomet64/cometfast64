@@ -32,6 +32,14 @@ class SM64_Animation:
 		#return self.header.to_c() + '\n' +\
 		#	self.indices.to_c() + '\n' +\
 		#	self.values.to_c() + '\n'
+
+	def to_json(self, friendlyName, friendlyAuthor):
+		return '{\n\t' + self.header.to_json(friendlyName, friendlyAuthor) + ',\n\t' +\
+			self.values.to_json(assigned_name="values") + ',\n\t' +\
+			self.indices.to_json(assigned_name="indices") + '}'
+		#return self.header.to_c() + '\n' +\
+		#	self.indices.to_c() + '\n' +\
+		#	self.values.to_c() + '\n'
 	
 	def to_c_def(self):
 		return "extern const struct Animation *const " + self.name + '[];\n'
@@ -60,6 +68,33 @@ class SM64_ShortArray:
 				data += '\n\t'
 				wrapCounter = 0
 		data += '\n};\n'
+		return data
+	
+	def to_json(self, assigned_name = ""):
+		if (assigned_name == ""):
+			assigned_name = self.name
+
+		bytedata = bytearray(0)
+		data = '"' + assigned_name + '": [\n\t'
+		wrapCounter = 0
+		for short in self.shortData:
+			print('Short Hex:' + format(short, '04X'))
+			print('Short Bytes:' + short.to_bytes(2, 'big', signed = False).hex())
+			bytedata += short.to_bytes(2, 'big', signed = False)
+		
+		print("Bytes number: " + str(len(bytedata)))
+
+		for index, byte in enumerate(bytedata):
+			if index < len(bytedata)-1:
+				data += '"0x' + format(byte, '02X') + '", '
+			else:
+				data += '"0x' + format(byte, '02X') + '"'
+			
+			wrapCounter += 1
+			if wrapCounter > 7:
+				data += '\n\t'
+				wrapCounter = 0
+		data += ']\n'
 		return data
 
 class SM64_AnimationHeader:
@@ -116,6 +151,15 @@ class SM64_AnimationHeader:
 			'\t0,\n' + \
 			'};\n'
 		return data
+	
+	def to_json(self, friendlyName = "", friendlyAuthor = ""):
+		data = '"name": "' + friendlyName + '",\n' +\
+			'\t"author": "' + friendlyAuthor + '",\n' +\
+			'\t"looping": "' + str("true" if self.repetitions < 1 else "false") + '",\n' +\
+			'\t"length": ' + str(int(round(self.frameInterval[1] - 1))) + ',\n' +\
+			'\t"nodes": ' + str(self.nodeCount)
+		return data
+
 
 class SM64_AnimIndexNode:
 	def __init__(self, x, y, z):
@@ -247,7 +291,24 @@ def exportAnimationInsertableBinary(filepath, armatureObj, isDMA, loopAnim):
 	
 	writeInsertableFile(filepath, insertableBinaryTypes['Animation'],
 		sm64_anim.get_ptr_offsets(isDMA), startAddress, animData)
-	
+
+def exportAnimationJSON(filepath, armatureObj, loop, name, author):
+	sm64_anim = exportAnimationCommon(armatureObj, loop, "")
+	# animName = armatureObj.animation_data.action.name
+
+	data = sm64_anim.to_json(name, author)
+	outFile = open(filepath, 'w', newline='\n')
+	outFile.write(data)
+	outFile.close()
+
+	# write to json file
+	# hahahaha shameless rewrite of the c export func
+	dataFilePath = filepath
+	if not os.path.exists(dataFilePath):
+		dataFile = open(dataFilePath, 'w', newline='\n')
+		dataFile.close()
+	writeIfNotFound(dataFilePath, '', '')
+
 
 def exportAnimationCommon(armatureObj, loopAnim, name):
 	if armatureObj.animation_data is None or \
@@ -283,26 +344,26 @@ def exportAnimationCommon(armatureObj, loopAnim, name):
 	transformValuesStart = transformIndicesStart
 
 	for translationFrameProperty in translationData:
-		frameCount = len(translationFrameProperty)
+		frameCount = len(translationFrameProperty.frames)
 		sm64_anim.indices.shortData.append(frameCount)
 		sm64_anim.indices.shortData.append(transformValuesOffset)
 		if(transformValuesOffset) > 2**16 - 1:
 			raise PluginError('Animation is too large.')
 		transformValuesOffset += frameCount
 		transformValuesStart += 4
-		for value in translationFrameProperty:
+		for value in translationFrameProperty.frames:
 			sm64_anim.values.shortData.append(int.from_bytes(value.to_bytes(2,'big', signed = True), byteorder = 'big', signed = False))
 
 	for boneFrameData in armatureFrameData:
 		for boneFrameDataProperty in boneFrameData:
-			frameCount = len(boneFrameDataProperty)
+			frameCount = len(boneFrameDataProperty.frames)
 			sm64_anim.indices.shortData.append(frameCount)
 			sm64_anim.indices.shortData.append(transformValuesOffset)
 			if(transformValuesOffset) > 2**16 - 1:
 				raise PluginError('Animation is too large.')
 			transformValuesOffset += frameCount
 			transformValuesStart += 4
-			for value in boneFrameDataProperty:
+			for value in boneFrameDataProperty.frames:
 				sm64_anim.values.shortData.append(value)
 	
 	animSize = headerSize + len(sm64_anim.indices.shortData) * 2 + \
@@ -313,30 +374,23 @@ def exportAnimationCommon(armatureObj, loopAnim, name):
 		transformIndicesStart, animSize)
 	
 	return sm64_anim
-	
-def saveQuaternionFrame(frameData, rotation):
-	for i in range(3):
-		field = rotation.to_euler()[i]
-		value = (math.degrees(field) % 360 ) / 360
-		frameData[i].append(min(int(round(value * (2**16 - 1))), 2**16 - 1))
 
 def removeTrailingFrames(frameData):
 	for i in range(3):
-		if len(frameData[i]) < 2:
+		if len(frameData[i].frames) < 2:
 			continue
-		lastUniqueFrame = len(frameData[i]) - 1
+		lastUniqueFrame = len(frameData[i].frames) - 1
 		while lastUniqueFrame > 0:
-			if frameData[i][lastUniqueFrame] == \
-				frameData[i][lastUniqueFrame - 1]:
+			if frameData[i].frames[lastUniqueFrame] == \
+				frameData[i].frames[lastUniqueFrame - 1]:
 				lastUniqueFrame -= 1
 			else:
 				break
-		frameData[i] = frameData[i][:lastUniqueFrame + 1]
+		frameData[i].frames = frameData[i].frames[:lastUniqueFrame + 1]
 
 def saveTranslationFrame(frameData, translation):
 	for i in range(3):
-		frameData[i].append(min(int(round(translation[i] * bpy.context.scene.blenderToSM64Scale)),
-			2**16 - 1))
+		frameData[i].frames.append(min(int(round(translation[i])), 2**16 - 1))
 
 def convertAnimationData(anim, armatureObj, frameEnd):
 	bonesToProcess = findStartBones(armatureObj)
@@ -359,10 +413,13 @@ def convertAnimationData(anim, armatureObj, frameEnd):
 		bonesToProcess = childrenNames + bonesToProcess
 	
 	# list of boneFrameData, which is [[x frames], [y frames], [z frames]]
-	translationData = [[],[],[]]
-	armatureFrameData = []
-	for i in range(len(animBones)):
-		armatureFrameData.append([[],[],[]])
+	translationData = [ValueFrameData(0, i, []) for i in range(3)]
+	armatureFrameData = [[
+		ValueFrameData(i, 0, []),
+		ValueFrameData(i, 1, []),
+		ValueFrameData(i, 2, [])] for i in range(len(animBones))]
+
+	currentFrame = bpy.context.scene.frame_current
 	for frame in range(frameEnd):
 		bpy.context.scene.frame_set(frame)
 		rootBone = armatureObj.data.bones[animBones[0]]
@@ -370,7 +427,7 @@ def convertAnimationData(anim, armatureObj, frameEnd):
 
 		# Hacky solution to handle Z-up to Y-up conversion
 		translation = mathutils.Quaternion((1, 0, 0), math.radians(-90.0)) @ \
-			rootPoseBone.matrix.decompose()[0]
+			(mathutils.Matrix.Scale(bpy.context.scene.blenderToSM64Scale, 4) @ rootPoseBone.matrix).decompose()[0]
 		saveTranslationFrame(translationData, translation)
 
 		for boneIndex in range(len(animBones)):
@@ -388,6 +445,7 @@ def convertAnimationData(anim, armatureObj, frameEnd):
 			
 			saveQuaternionFrame(armatureFrameData[boneIndex], rotationValue)
 	
+	bpy.context.scene.frame_set(currentFrame)
 	removeTrailingFrames(translationData)
 	for frameData in armatureFrameData:
 		removeTrailingFrames(frameData)
