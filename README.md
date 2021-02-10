@@ -3,7 +3,9 @@
 
 This requires Blender 2.82+.
 
-![Unofficial Fast64 Logo](https://github.com/GlitchyPSIX/cometfast64/blob/master/images/logo.png)
+![Unofficial Fast64 Logo](https://github.com/projectcomet64/cometfast64/blob/master/images/logo.png?raw=true)
+
+(Side note: Kure said a logo wasn't necessary, but I felt like making one anyways. :^P)
 
 ![alt-text](https://bitbucket.org/kurethedead/fast64/raw/master/images/mario_running.gif)
 
