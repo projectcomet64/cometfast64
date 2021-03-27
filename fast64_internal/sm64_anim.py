@@ -78,8 +78,6 @@ class SM64_ShortArray:
 		data = '"' + assigned_name + '": [\n\t'
 		wrapCounter = 0
 		for short in self.shortData:
-			print('Short Hex:' + format(short, '04X'))
-			print('Short Bytes:' + short.to_bytes(2, 'big', signed = False).hex())
 			bytedata += short.to_bytes(2, 'big', signed = False)
 		
 		print("Bytes number: " + str(len(bytedata)))
@@ -156,7 +154,7 @@ class SM64_AnimationHeader:
 		data = '"name": "' + friendlyName + '",\n' +\
 			'\t"author": "' + friendlyAuthor + '",\n' +\
 			'\t"looping": "' + str("true" if self.repetitions < 1 else "false") + '",\n' +\
-			'\t"length": ' + str(int(round(self.frameInterval[1] - 1))) + ',\n' +\
+			'\t"length": ' + str(int(round(self.frameInterval[1] - self.frameInterval[0] - 1))) + ',\n' +\
 			'\t"nodes": ' + str(self.nodeCount)
 		return data
 
@@ -324,11 +322,13 @@ def exportAnimationCommon(armatureObj, loopAnim, name):
 	# frame_start is minimum 0
 	frameInterval[0] = max(bpy.context.scene.frame_start,
 		int(round(anim.frame_range[0])))
+	print("Frame Start:" + str(frameInterval[0]))
 
 	frameInterval[1] = \
 		max(min(bpy.context.scene.frame_end, 
 			int(round(anim.frame_range[1]))), frameInterval[0]) + 1
-	translationData, armatureFrameData = convertAnimationData(anim, armatureObj, frameInterval[1])
+	translationData, armatureFrameData = convertAnimationData(anim, armatureObj, frameInterval[1], frameInterval[0])
+	print("Frame End:" + str(frameInterval[1]))
 
 	repetitions = 0 if loopAnim else 1
 	marioYOffset = 0x00 # ??? Seems to be this value for most animations
@@ -392,7 +392,7 @@ def saveTranslationFrame(frameData, translation):
 	for i in range(3):
 		frameData[i].frames.append(min(int(round(translation[i])), 2**16 - 1))
 
-def convertAnimationData(anim, armatureObj, frameEnd):
+def convertAnimationData(anim, armatureObj, frameEnd, frameStart = 0):
 	bonesToProcess = findStartBones(armatureObj)
 	currentBone = armatureObj.data.bones[bonesToProcess[0]]
 	animBones = []
@@ -420,7 +420,7 @@ def convertAnimationData(anim, armatureObj, frameEnd):
 		ValueFrameData(i, 2, [])] for i in range(len(animBones))]
 
 	currentFrame = bpy.context.scene.frame_current
-	for frame in range(frameEnd):
+	for frame in range(frameStart, frameEnd):
 		bpy.context.scene.frame_set(frame)
 		rootBone = armatureObj.data.bones[animBones[0]]
 		rootPoseBone = armatureObj.pose.bones[animBones[0]]

@@ -35,9 +35,9 @@ def getFrameInterval(anim):
 	# frame_start is minimum 0
 	frameInterval[0] = max(bpy.context.scene.frame_start,
 		int(round(anim.frame_range[0])))
-
+	print("Frame Interval Start:" + str(frameInterval[0]))
 	frameInterval[1] = \
 		max(min(bpy.context.scene.frame_end, 
 			int(round(anim.frame_range[1]))), frameInterval[0]) + 1
-	
+	print("Frame Interval End:" + str(frameInterval[1]))
 	return frameInterval
